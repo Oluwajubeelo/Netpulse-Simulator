@@ -3,22 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NetPulse | Congestion Sandbox</title>
-    <!-- Tailwind CSS for sleek styling -->
+    <title>NetPulse Congestion Sandbox</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Chart.js for the live TCP graph -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- Phosphor Icons -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 </head>
 <body class="bg-gray-50 text-gray-900 font-sans min-h-screen p-6 md:p-10 selection:bg-gray-300">
-
     <div class="max-w-7xl mx-auto space-y-6">
-        <!-- Header -->
         <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-300 pb-6">
             <div>
                 <h1 class="text-3xl font-bold text-black flex items-center gap-2">
-                    <i class="ph ph-activity text-black"></i> NetPulse Sandbox
+                    <i class="text-gray-500 mt-1"></i> Netpulse Sandbox
                 </h1>
                 <p class="text-gray-500 mt-1">Multi-Host AIMD TCP Simulation</p>
             </div>
@@ -35,23 +30,21 @@
         </header>
 
         <!-- Main Grid -->
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            
-            <!-- Left Column: Controls & Router Stats -->
+         <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <!-- Left Column: Controls and router stats -->
             <div class="space-y-6 lg:col-span-1">
-                
                 <!-- Router Dashboard -->
                 <div class="bg-white border border-gray-200 shadow-sm rounded-xl p-6 relative overflow-hidden">
                     <div class="absolute top-0 left-0 w-full h-1 bg-gray-300" id="routerStatusLine"></div>
                     <h2 class="text-lg font-bold text-black mb-4 flex items-center gap-2">
                         <i class="ph ph-router"></i> Router Status
                     </h2>
-                    
+
                     <div class="space-y-4">
                         <div>
                             <div class="flex justify-between text-sm mb-1 font-semibold">
                                 <span class="text-gray-600">Queue Usage</span>
-                                <span id="queueCount" class="font-mono text-black">0 / 200</span>
+                                <span class id="queueCount" class="font-mono text-black">0 / 200</span>
                             </div>
                             <div class="w-full bg-gray-200 rounded-full h-2">
                                 <div id="queueBar" class="bg-gray-400 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
@@ -60,33 +53,30 @@
 
                         <div class="pt-4 border-t border-gray-200">
                             <p class="text-sm text-gray-500 font-semibold mb-1">Total Packets Dropped</p>
-                            <p id="droppedCount" class="text-2xl font-mono font-bold text-black">0</p>
+                            <p class="droppedCount" class="text-2xl font-mono font-bold text-black">0</p>
                         </div>
                     </div>
                 </div>
-
                 <!-- Host Controls -->
-                <div class="bg-white border border-gray-200 shadow-sm rounded-xl p-6">
+                 <div class="bg-white border border-gray-200 shadow-sm rounded-xl p-6">
                     <h2 class="text-lg font-bold text-black mb-4 flex items-center gap-2">
-                        <i class="ph ph-desktop"></i> Host Controls
+                        <i class="ph ph-plus-circle text-lg"></i> Host Controls
                     </h2>
-                    
-                    <button onclick="addHost()" class="w-full bg-black hover:bg-gray-800 text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 mb-4 shadow-lg shadow-gray-300">
+
+                    <button onClick="addHost()" class="w-full bg-black hover:bg-gray-800 text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center gap-2 mb-4 shadow-lg shadow-gray-300">
                         <i class="ph ph-plus-circle text-lg"></i> Spawn New Host
                     </button>
 
                     <div id="activeHostsList" class="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                        <!-- Host items will be injected here via JS -->
-                        <div class="text-sm text-gray-400 text-center italic py-4">Waiting for engine...</div>
+                        <div id="waiting-msg" class="text-sm text-gray-400 text-center italic py-4"> Waiting for engine...</div>
                     </div>
-                </div>
+                 </div>
 
             </div>
-
-            <!-- Right Column: The Chart -->
-            <div class="bg-white border border-gray-200 shadow-sm rounded-xl p-6 lg:col-span-3">
+            <!-- Right Column: the chart -->
+            <div class="bg-white border border-gray-200 shadow-sm rounded-xl p-6 lg:col-span 3">
                 <h2 class="text-lg font-bold text-black mb-4 flex items-center gap-2">
-                    <i class="ph ph-chart-line-up"></i> Live Transmission Rates (cwnd)
+                    <i class="ph ph-chart-line-up"></i> Live Transmission Rates(cwnd)
                 </h2>
                 <div class="relative h-[400px] w-full">
                     <canvas id="tcpChart"></canvas>
@@ -97,15 +87,27 @@
                 </div>
             </div>
 
-        </div>
+         </div>
     </div>
-
     <!-- JavaScript Application Logic -->
-    <script>
-        const API_BASE = 'http://localhost:8080';
-        const MAX_DATA_POINTS = 50; // How many ticks to show on the graph
-        
-        // UI Elements
+     <script>
+        const API_BASE = 'http:localhost:8080';
+        const MAX_DATA_POINTS = 50;
+
+        //Wipe the Java server when the website is refreshed
+        window.onload = async() => {
+            try{
+                await fetch(`${API_BASE}/reset`, {method: 'POST'});
+
+                tcpChart.data.labels =[];
+                tcpChart.data.datasets=[];
+                tcpChart.update();
+            }
+            catch(e){
+                console.error("Failed to reset backend",e)
+            }
+        };
+
         const tickDisplay = document.getElementById('tickDisplay');
         const queueCount = document.getElementById('queueCount');
         const queueBar = document.getElementById('queueBar');
@@ -113,182 +115,8 @@
         const routerStatusLine = document.getElementById('routerStatusLine');
         const activeHostsList = document.getElementById('activeHostsList');
 
-        // Grayscale color palette for the graph lines
-        const colors = ['#000000', '#4b5563', '#9ca3af', '#1f2937', '#6b7280', '#374151', '#d1d5db'];
-
-        // Initialize Chart.js
-        const ctx = document.getElementById('tcpChart').getContext('2d');
-        const tcpChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: [], // Ticks go here
-                datasets: [] // Host lines go here
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: false, // Turn off animation to prevent lag during fast polling
-                interaction: { mode: 'index', intersect: false },
-                plugins: {
-                    legend: { position: 'top', labels: { color: '#374151', usePointStyle: true, font: { weight: 'bold' } } },
-                    tooltip: { 
-                        backgroundColor: '#ffffff', 
-                        titleColor: '#000000', 
-                        bodyColor: '#000000',
-                        borderColor: '#d1d5db',
-                        borderWidth: 1
-                    }
-                },
-                scales: {
-                    x: { 
-                        title: { display: true, text: 'Time (Master Ticks)', color: '#6b7280', font: { weight: 'bold' } },
-                        grid: { color: '#f3f4f6', borderDash: [5, 5] },
-                        ticks: { color: '#4b5563' }
-                    },
-                    y: { 
-                        title: { display: true, text: 'Speed (Packets/Tick)', color: '#6b7280', font: { weight: 'bold' } },
-                        grid: { color: '#e5e7eb' },
-                        ticks: { color: '#4b5563' },
-                        min: 0,
-                        suggestedMax: 50 // Gives the graph some initial headroom
-                    }
-                }
-            }
-        });
-
-        // The Engine Loop: Polls the Java server every 200ms
-        async function fetchState() {
-            try {
-                // CHANGED: Reverted to /stats to match backend
-                const response = await fetch(`${API_BASE}/stats`);
-                if (!response.ok) throw new Error("Server response not OK");
-                const data = await response.json();
-                
-                updateDashboard(data);
-            } catch (error) {
-                console.warn("Waiting for Java backend...", error.message);
-            }
-        }
-
-        function updateDashboard(data) {
-            // 1. Update Global Stats
-            tickDisplay.innerText = data.currentTick;
-            
-            // 2. Update Router Stats
-            const qSize = data.router.queueSize;
-            const qMax = data.router.maxCapacity;
-            const qPercent = Math.min((qSize / qMax) * 100, 100);
-            
-            queueCount.innerText = `${qSize} / ${qMax}`;
-            queueBar.style.width = `${qPercent}%`;
-            droppedCount.innerText = data.router.totalDropped;
-
-            // Change router colors based on congestion (Grayscale themed)
-            if (qPercent > 80) {
-                queueBar.className = "bg-black h-2 rounded-full transition-all duration-300";
-                routerStatusLine.className = "absolute top-0 left-0 w-full h-1 bg-black";
-                queueCount.className = "font-mono text-black font-bold";
-            } else if (qPercent > 50) {
-                queueBar.className = "bg-gray-600 h-2 rounded-full transition-all duration-300";
-                routerStatusLine.className = "absolute top-0 left-0 w-full h-1 bg-gray-600";
-                queueCount.className = "font-mono text-gray-800 font-bold";
-            } else {
-                queueBar.className = "bg-gray-300 h-2 rounded-full transition-all duration-300";
-                routerStatusLine.className = "absolute top-0 left-0 w-full h-1 bg-gray-300";
-                queueCount.className = "font-mono text-gray-600 font-bold";
-            }
-
-            // 3. Update Hosts List UI
-            activeHostsList.innerHTML = '';
-            data.hosts.forEach(host => {
-                const stateTextClass = host.state === 'SLOW_START' ? 'text-gray-500' : 'text-black font-bold';
-                
-                activeHostsList.innerHTML += `
-                    <div class="flex items-center justify-between bg-white p-3 rounded-lg border border-gray-200 shadow-sm mb-2">
-                        <div>
-                            <p class="font-bold text-black">Host ${host.hostId}</p>
-                            <p class="text-xs ${stateTextClass}">${host.state}</p>
-                        </div>
-                        <div class="flex items-center gap-3">
-                            <span class="font-mono font-bold text-sm bg-gray-100 text-black px-2 py-1 rounded border border-gray-200">cw: ${host.cwnd}</span>
-                            <button onclick="killHost(${host.hostId})" class="text-gray-400 hover:text-black transition-colors" title="Kill Host">
-                                <i class="ph ph-trash text-lg"></i>
-                            </button>
-                        </div>
-                    </div>
-                `;
-            });
-
-            // 4. Update the Graph
-            updateChart(data);
-        }
-
-        function updateChart(data) {
-            // Push new time tick
-            tcpChart.data.labels.push(data.currentTick);
-            if (tcpChart.data.labels.length > MAX_DATA_POINTS) {
-                tcpChart.data.labels.shift();
-            }
-
-            // Find current active host IDs
-            const activeHostIds = data.hosts.map(h => h.hostId);
-
-            // Remove disconnected hosts from the graph
-            tcpChart.data.datasets = tcpChart.data.datasets.filter(dataset => activeHostIds.includes(dataset.id));
-
-            // Update data for active hosts
-            data.hosts.forEach(host => {
-                let dataset = tcpChart.data.datasets.find(ds => ds.id === host.hostId);
-                
-                // If a new host appeared, create a new line for it
-                if (!dataset) {
-                    const hostColor = colors[host.hostId % colors.length];
-                    dataset = {
-                        id: host.hostId,
-                        label: `Host ${host.hostId}`,
-                        data: Array(tcpChart.data.labels.length - 1).fill(null), // Pad past data so it aligns perfectly
-                        borderColor: hostColor,
-                        backgroundColor: hostColor,
-                        tension: 0.1,
-                        borderWidth: 2,
-                        pointRadius: 0, // Hide dots for cleaner look
-                        pointHitRadius: 10
-                    };
-                    tcpChart.data.datasets.push(dataset);
-                }
-
-                // Push new cwnd data
-                dataset.data.push(host.cwnd);
-                if (dataset.data.length > MAX_DATA_POINTS) {
-                    dataset.data.shift();
-                }
-            });
-
-            tcpChart.update();
-        }
-
-        // --- API Commands ---
-        async function addHost() {
-            try { await fetch(`${API_BASE}/addHost`, { method: 'POST' }); } 
-            catch (e) { console.error("Failed to add host", e); }
-        }
-
-        async function killHost(id) {
-            try { await fetch(`${API_BASE}/removeHost?id=${id}`, { method: 'POST' }); } 
-            catch (e) { console.error("Failed to remove host", e); }
-        }
-
-        // Start the polling loop (5 times a second)
-        setInterval(fetchState, 200);
-
-    </script>
-
-    <!-- Custom scrollbar CSS for the host list -->
-    <style>
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f3f4f6; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
-    </style>
+        const colors = ['#000000', '#4b5563', '#9ca3af', '#1f2937' , '#6b7280', '#374151', '#d1d5db'];
+        
+     </script>
 </body>
 </html>

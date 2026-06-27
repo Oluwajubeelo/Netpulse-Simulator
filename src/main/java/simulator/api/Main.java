@@ -7,41 +7,53 @@ import simulator.core.Router;
 import simulator.core.packetPool;
 public class Main {
     private static int nextHostId = 1;
+    private static EventLoop currentLoop;
+    private static Thread engineThread;
 
-    public static void main(String[] args){
+    public static void resetEngine(){
+        if (currentLoop!=null){
+            currentLoop.isRunning=false;
+        }
+
         packetPool pool = new packetPool(10000);
         Router router = new Router(200, 50);
-        EventLoop loop = new EventLoop(router, pool);
+        currentLoop = new EventLoop(router, pool);
 
-        loop.addHost(new Host(nextHostId++));
+        nextHostId = 1;
+        currentLoop.addHost(new Host(nextHostId++));
 
-        Thread engineThread = new Thread(loop);
+        engineThread = new Thread(currentLoop);
         engineThread.start();
+    }
 
-        Javalin app = Javalin.create(config -> {
-            config.bundledPlugins.enableCors(cors -> {
+    public static void main(String[] args){
+        resetEngine();
+
+        Javalin app = Javalin.create(config ->{
+            config.bundledPlugins.enableCors( cors ->{
                 cors.addRule(it -> it.anyHost());
             });
+            config.staticFiles.add("frontend", io.javalin.http.staticfiles.Location.EXTERNAL);
         }).start(8080);
 
         System.out.println("\n--- Congestion Sandbox Backend is LIVE ---");
-        System.out.println("View live data at: http://localhost:8080/stats\n");
+        System.out.println("View live data at: http://localhost:8080/\n");
 
         app.get("/stats", ctx ->{
-            ctx.json(loop.getSystemSnapshot());
+            ctx.json(currentLoop.getSystemSnapshot());
         });
 
-        app.post("/addHost" , ctx ->{
+        app.post("/addHost" , ctx->{
             Host newHost = new Host(nextHostId++);
-            loop.addHost(newHost);
+            currentLoop.addHost(newHost);
             ctx.result("Added Host " + newHost.hostId);
             System.out.println("Spawning new host: " + newHost.hostId);
         });
 
-        app.post("/removeHost", ctx -> {
+        app.post("/removeHost", ctx ->{
             String idParam = ctx.queryParam("id");
             if(idParam != null){
-                loop.removeHost(Integer.parseInt(idParam));
+                currentLoop.removeHost(Integer.parseInt(idParam));
                 ctx.result("Removed Host " + idParam);
                 System.out.println("Killing host: " + idParam);
             }
@@ -49,5 +61,57 @@ public class Main {
                 ctx.status(400).result("Missing host ID");
             }
         });
+
+        app.post("/reset", ctx ->{
+            resetEngine();
+            ctx.result("Engine Reset");
+            System.out.println("--- The engine has been reset via frontend reload ---");
+        });
     }
 }
+
+//     public static void main(String[] args){
+//         packetPool pool = new packetPool(10000);
+//         Router router = new Router(200, 50);
+//         EventLoop loop = new EventLoop(router, pool);
+
+//         loop.addHost(new Host(nextHostId++));
+
+//         Thread engineThread = new Thread(loop);
+//         engineThread.start();
+
+//         Javalin app = Javalin.create(config -> {
+//             config.bundledPlugins.enableCors(cors -> {
+//                 cors.addRule(it -> it.anyHost());
+//             });
+//             config.staticFiles.add("frontend", io.javalin.http.staticfiles.Location.EXTERNAL);
+//             })
+//         .start(8080);
+
+//         System.out.println("\n--- Congestion Sandbox Backend is LIVE ---");
+//         System.out.println("View live data at: http://localhost:8080/stats\n");
+
+//         app.get("/stats", ctx ->{
+//             ctx.json(loop.getSystemSnapshot());
+//         });
+
+//         app.post("/addHost" , ctx ->{
+//             Host newHost = new Host(nextHostId++);
+//             loop.addHost(newHost);
+//             ctx.result("Added Host " + newHost.hostId);
+//             System.out.println("Spawning new host: " + newHost.hostId);
+//         });
+
+//         app.post("/removeHost", ctx -> {
+//             String idParam = ctx.queryParam("id");
+//             if(idParam != null){
+//                 loop.removeHost(Integer.parseInt(idParam));
+//                 ctx.result("Removed Host " + idParam);
+//                 System.out.println("Killing host: " + idParam);
+//             }
+//             else{
+//                 ctx.status(400).result("Missing host ID");
+//             }
+//         });
+//     }
+// }
