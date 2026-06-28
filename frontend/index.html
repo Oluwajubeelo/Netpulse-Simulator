@@ -13,7 +13,7 @@
         <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-gray-300 pb-6">
             <div>
                 <h1 class="text-3xl font-bold text-black flex items-center gap-2">
-                    <i class="text-gray-500 mt-1"></i> Netpulse Sandbox
+                    <i class="ph ph-activity text-black"></i> Netpulse Sandbox
                 </h1>
                 <p class="text-gray-500 mt-1">Multi-Host AIMD TCP Simulation</p>
             </div>
@@ -44,7 +44,7 @@
                         <div>
                             <div class="flex justify-between text-sm mb-1 font-semibold">
                                 <span class="text-gray-600">Queue Usage</span>
-                                <span class id="queueCount" class="font-mono text-black">0 / 200</span>
+                                <span id="queueCount" class="font-mono text-black">0 / 200</span>
                             </div>
                             <div class="w-full bg-gray-200 rounded-full h-2">
                                 <div id="queueBar" class="bg-gray-400 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
@@ -53,7 +53,7 @@
 
                         <div class="pt-4 border-t border-gray-200">
                             <p class="text-sm text-gray-500 font-semibold mb-1">Total Packets Dropped</p>
-                            <p class="droppedCount" class="text-2xl font-mono font-bold text-black">0</p>
+                            <p id="droppedCount" class="text-2xl font-mono font-bold text-black">0</p>
                         </div>
                     </div>
                 </div>
@@ -74,7 +74,7 @@
 
             </div>
             <!-- Right Column: the chart -->
-            <div class="bg-white border border-gray-200 shadow-sm rounded-xl p-6 lg:col-span 3">
+            <div class="bg-white border border-gray-200 shadow-sm rounded-xl p-6 lg:col-span-3">
                 <h2 class="text-lg font-bold text-black mb-4 flex items-center gap-2">
                     <i class="ph ph-chart-line-up"></i> Live Transmission Rates(cwnd)
                 </h2>
@@ -91,7 +91,7 @@
     </div>
     <!-- JavaScript Application Logic -->
      <script>
-        const API_BASE = 'http:localhost:8080';
+        const API_BASE = 'http://localhost:8080';
         const MAX_DATA_POINTS = 50;
 
         //Wipe the Java server when the website is refreshed
@@ -125,7 +125,7 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: false,
-                interaction: { mode:'index', intersect: false},
+                interaction: { mode:'nearest', intersect: false},
                 plugins: {
                     legend: { position: 'top', labels: { color: '#374151' , usePointStyle: true, font: {weight: 'bold'}}},
                     tooltip: { backgroundColor: '#ffffff', titleColor: '#000000', bodyColor: '#000000', borderColor: '#d1d5db', borderWidth: 1}
@@ -150,10 +150,12 @@
         }
 
         function updateDashboard(data) {
+            data.hosts = data.hosts || data.host || data.activeHosts || [];
+
             tickDisplay.innerText = data.currentTick;
 
             const qSize = data.router.queueSize;
-            const qMax = datarouter.maxCapacity;
+            const qMax = data.router.maxCapacity;
             const qPercent = Math.min((qSize / qMax) * 100,100);
 
             queueCount.innerText = `${qSize} / ${qMax}`;
@@ -187,7 +189,7 @@
                 const stateTextClass = host.state === 'SLOW_START' ? 'text-gray-500' : 'text-black font-bold';
 
                 if(document.getElementById(rowId)){
-                    document.getElementById(`host-state-${host.hostId}`).className = 'text-xs ${stateTextClass}';
+                    document.getElementById(`host-state-${host.hostId}`).className = `text-xs ${stateTextClass}`;
                     document.getElementById(`host-state-${host.hostId}`).innerText = host.state;
                     document.getElementById(`host-cwnd-${host.hostId}`).innerText = `cw: ${host.cwnd}`;
                     existingDivIds.delete(rowId);
@@ -200,7 +202,7 @@
                             <p id="host-state-${host.hostId}" class="text-xs ${stateTextClass}"> ${host.state}</p>
                         </div>
                         <div class="flex items-center gap-3">
-                            <span id="host-cwnd-${host.hostId}" class= "font-bold text-sm bg-gray-100 text-black px-2 py-1 rounded border border-gray-200">cw: ${hos.cwnd}</span>
+                            <span id="host-cwnd-${host.hostId}" class= "font-bold text-sm bg-gray-100 text-black px-2 py-1 rounded border border-gray-200">cw: ${host.cwnd}</span>
                             <button onmousedown="killHost(${host.hostId})" class="text-gray-400 hover:text-black transition-colors" title="Kill Host">
                                 <i class="ph ph-trash text-lg pointer-events-none"></i>
                             </button>
@@ -226,17 +228,30 @@
 
             const activeHostIds = data.hosts.map(h => h.hostId);
 
-            for (let i= tcpChart.data.datasets.length -1; i>=0; i--){
-                if(!activeHostIds.includes(tcpChart.data.datasets[i].id)){
-                    tcpChart.data.datasets.splice(i,1);
+            tcpChart.data.datasets.forEach(ds =>{
+                if(!activeHostIds.includes(ds.id)){
+                    ds.hidden = true;
+
+                    ds.data.push(null);
+                    if (ds.data.length > MAX_DATA_POINTS){
+                        ds.data.shift();
+                    }
                 }
-            }
+            });
+            // tcpChart.setActiveElements([]);
+            // tcpChart.data.datasets = tcpChart.data.datasets.filter(ds => activeHostIds.includes(ds.id));
+
+            // for (let i= tcpChart.data.datasets.length -1; i>=0; i--){
+            //     if(!activeHostIds.includes(tcpChart.data.datasets[i].id)){
+            //         tcpChart.data.datasets.splice(i,1);
+            //     }
+            // }
 
             data.hosts.forEach(host => {
                 let dataset = tcpChart.data.datasets.find(ds => ds.id === host.hostId);
 
                 if(!dataset){
-                    const hostColor = colors[host.hostId % colorslength];
+                    const hostColor = colors[host.hostId % colors.length];
                     dataset = {
                         id: host.hostId,
                         label: `Host ${host.hostId}`,
@@ -256,8 +271,7 @@
                     dataset.data.shift();
                 }
             });
-
-            tcpChart.update();
+            tcpChart.update('none');
         }
 
         async function addHost() {
@@ -266,7 +280,7 @@
         }
 
         async function killHost(id){
-            try{await fetch(`${API_BASE}/removeHostid?id=${id}`, { method: 'POST'});}
+            try{await fetch(`${API_BASE}/removeHost?id=${id}`, { method: 'POST'});}
             catch (e) { console.error("Failed to remove host", e);}
         }
 
@@ -274,8 +288,6 @@
      </script>
 
      <style>
-        .custom-scrollbar::-webkit-scrollbar {width: 6px;}
-        .custom-scrollbar::-webkit-scrollbar-track {background: #f3f4f6; border-radius: 4px;}
         .custom-scrollbar::-webkit-scrollbar-thumb {background: #d1d5db; border-radius: 4px;}
         .custom-scrollbar::-webkit-scrollbar-thumb:hover{background: #9ca3af;}
      </style>

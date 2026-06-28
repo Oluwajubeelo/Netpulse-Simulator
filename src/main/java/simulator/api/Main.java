@@ -17,7 +17,7 @@ public class Main {
 
         packetPool pool = new packetPool(10000);
         Router router = new Router(200, 50);
-        currentLoop = new EventLoop(router, pool);
+        currentLoop = new EventLoop(router, pool); 
 
         nextHostId = 1;
         currentLoop.addHost(new Host(nextHostId++));
