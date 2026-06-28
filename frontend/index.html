@@ -116,7 +116,168 @@
         const activeHostsList = document.getElementById('activeHostsList');
 
         const colors = ['#000000', '#4b5563', '#9ca3af', '#1f2937' , '#6b7280', '#374151', '#d1d5db'];
-        
+
+        const ctx=document.getElementById('tcpChart').getContext('2d');
+        const tcpChart=new Chart(ctx, {
+            type: 'line',
+            data: {labels: [], datasets: []},
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                interaction: { mode:'index', intersect: false},
+                plugins: {
+                    legend: { position: 'top', labels: { color: '#374151' , usePointStyle: true, font: {weight: 'bold'}}},
+                    tooltip: { backgroundColor: '#ffffff', titleColor: '#000000', bodyColor: '#000000', borderColor: '#d1d5db', borderWidth: 1}
+                },
+                scales: {
+                    x: {title: { display: true, text: 'Time (Master Ticks)', color: '#6b7280', font: {weight: 'bold'}}, grid: {color: '#f3f4f6', borderDash: [5,5]}, ticks: {color: '#4b5563'}},
+                    y: {title: { display: true, text: 'Speed (Packets/Tick)', color: '#6b7280', font: {weight: 'bold'}}, grid: {color: '#e5e7eb'}, ticks: {color: '#4b5563'}, min: 0, suggestedMax: 50}
+                }
+            }
+        });
+
+        async function fetchState() {
+            try {
+                const response = await fetch(`${API_BASE}/stats`);
+                if (!response.ok) throw new Error("Server response not OK");
+                const data = await response.json();
+                updateDashboard(data);
+            }
+            catch(error){
+                console.warn("Waiting for Java backend...", error.message);
+            }
+        }
+
+        function updateDashboard(data) {
+            tickDisplay.innerText = data.currentTick;
+
+            const qSize = data.router.queueSize;
+            const qMax = datarouter.maxCapacity;
+            const qPercent = Math.min((qSize / qMax) * 100,100);
+
+            queueCount.innerText = `${qSize} / ${qMax}`;
+            queueBar.style.width = `${qPercent}%`;
+            droppedCount.innerText = data.router.totalDropped;
+
+            if (qPercent > 80) {
+                queueBar.className = "bg-black h-2 rounded-full transition-all duration-300";
+                routerStatusLine.className = "absolute top-0 left-0 w-full h-1 bg-black";
+                queueCount.className ="font-mono text-black font-bold";
+            }
+            else if(qPercent > 50){
+                queueBar.className = "bg-gray-600 h-2 rounded-full transition-all duration-300";
+                routerStatusLine.className = "absolute top-0 left-0 w-full h-1 bg-gray-600";
+                queueCount.className ="font-mono text-gray-800 font-bold";
+            }
+            else{
+                queueBar.className = "bg-gray-300 h-2 rounded-full transition-all duration-300";
+                routerStatusLine.className = "absolute top-0 left-0 w-full h-1 bg-gray-300";
+                queueCount.className = "font-mono text-gray-600 font-bold";
+            }
+
+            const existingDivIds = new Set(Array.from(activeHostsList.children).map(c => c.id));
+            if (existingDivIds.has('waiting-msg') && data.hosts.length >0){
+                document.getElementById('waiting-msg').remove();
+                existingDivIds.delete('waiting-msg');
+            }
+
+            data.hosts.forEach(host => {
+                const rowId = `host-row-${host.hostId}`;
+                const stateTextClass = host.state === 'SLOW_START' ? 'text-gray-500' : 'text-black font-bold';
+
+                if(document.getElementById(rowId)){
+                    document.getElementById(`host-state-${host.hostId}`).className = 'text-xs ${stateTextClass}';
+                    document.getElementById(`host-state-${host.hostId}`).innerText = host.state;
+                    document.getElementById(`host-cwnd-${host.hostId}`).innerText = `cw: ${host.cwnd}`;
+                    existingDivIds.delete(rowId);
+                }
+                else{
+                    activeHostsList.insertAdjacentHTML('beforeend', `
+                    <div id="${rowId}" class="flex items-center justify-between bg-white p-3 rounded-lg border-gray-200 shadow-sm mb-2">
+                        <div>
+                            <p class="font-bold text-black">Host ${host.hostId}</p>
+                            <p id="host-state-${host.hostId}" class="text-xs ${stateTextClass}"> ${host.state}</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span id="host-cwnd-${host.hostId}" class= "font-bold text-sm bg-gray-100 text-black px-2 py-1 rounded border border-gray-200">cw: ${hos.cwnd}</span>
+                            <button onmousedown="killHost(${host.hostId})" class="text-gray-400 hover:text-black transition-colors" title="Kill Host">
+                                <i class="ph ph-trash text-lg pointer-events-none"></i>
+                            </button>
+                        </div>
+                    </div>
+                `);
+                }
+            });
+
+            existingDivIds.forEach(id => document.getElementById(id)?.remove());
+
+            if(data.hosts.length ===0 && activeHostsList.children.length === 0){
+                activeHostsList.innerHTML = `<div id="waiting-msg" class="text-sm text-gray-400 text-center italic py-4"> No active hosts</div>`;
+            }
+
+            updateChart(data);
+        }
+        function updateChart(data) {
+            tcpChart.data.labels.push(data.currentTick);
+            if (tcpChart.data.labels.length > MAX_DATA_POINTS){
+                tcpChart.data.labels.shift();
+            }
+
+            const activeHostIds = data.hosts.map(h => h.hostId);
+
+            for (let i= tcpChart.data.datasets.length -1; i>=0; i--){
+                if(!activeHostIds.includes(tcpChart.data.datasets[i].id)){
+                    tcpChart.data.datasets.splice(i,1);
+                }
+            }
+
+            data.hosts.forEach(host => {
+                let dataset = tcpChart.data.datasets.find(ds => ds.id === host.hostId);
+
+                if(!dataset){
+                    const hostColor = colors[host.hostId % colorslength];
+                    dataset = {
+                        id: host.hostId,
+                        label: `Host ${host.hostId}`,
+                        data: Array(tcpChart.data.labels.length -1).fill(null),
+                        borderColor: hostColor,
+                        backgroundColor: hostColor,
+                        tension: 0.1,
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        pointHitRadius: 10
+                    };
+                    tcpChart.data.datasets.push(dataset);
+                }
+
+                dataset.data.push(host.cwnd);
+                if(dataset.data.length > MAX_DATA_POINTS){
+                    dataset.data.shift();
+                }
+            });
+
+            tcpChart.update();
+        }
+
+        async function addHost() {
+            try{ await fetch(`${API_BASE}/addHost`, {method: 'POST'});}
+            catch(e){ console.error("Failed to add host", e);}
+        }
+
+        async function killHost(id){
+            try{await fetch(`${API_BASE}/removeHostid?id=${id}`, { method: 'POST'});}
+            catch (e) { console.error("Failed to remove host", e);}
+        }
+
+        setInterval(fetchState,200);
      </script>
+
+     <style>
+        .custom-scrollbar::-webkit-scrollbar {width: 6px;}
+        .custom-scrollbar::-webkit-scrollbar-track {background: #f3f4f6; border-radius: 4px;}
+        .custom-scrollbar::-webkit-scrollbar-thumb {background: #d1d5db; border-radius: 4px;}
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover{background: #9ca3af;}
+     </style>
 </body>
 </html>
