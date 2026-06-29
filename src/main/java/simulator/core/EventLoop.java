@@ -12,6 +12,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
     public Router router;
     public packetPool pool;
     public boolean isRunning;
+    public boolean isPaused = false;
 
     public EventLoop(Router router, packetPool pool){
         this.currentTick = 0;
@@ -34,6 +35,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
         this.isRunning = true;
 
         while(isRunning){
+            if (isPaused){
+                try{ Thread.sleep(50);}
+                catch(InterruptedException e) {isRunning = false;}
+                continue;
+            }
             for(Host host : activeHosts){
                 host.tick(currentTick, pool, router);
             }
@@ -52,6 +58,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
     public Map<String, Object> getSystemSnapshot(){
         Map<String, Object> snapshot = new HashMap<>();
 
+        snapshot.put("isPaused", isPaused);
         snapshot.put("currentTick", currentTick);
         snapshot.put("router", router.getMetrics());
 

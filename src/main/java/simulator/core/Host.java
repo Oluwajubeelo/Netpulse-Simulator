@@ -1,7 +1,10 @@
 package simulator.core;
+
 import java.util.Map;
+
 public class Host {
     public int hostId;
+    public static boolean useSlowStart = true;
 
     public int cwnd;
     public int ssthresh;
@@ -13,7 +16,7 @@ public class Host {
         this.hostId=hostId;
         this.cwnd = 1;
         this.ssthresh = 64;
-        this.tcpState = "SLOW_START";
+        this.tcpState = useSlowStart ? "SLOW_START" : "CONGESTION_AVOIDANCE";
         this.experiencedDropThisTick = false;
     }
     public void tick(long currentTick, packetPool pool, Router router){
@@ -24,9 +27,9 @@ public class Host {
             }
         }
         updateTCPMath();
-
         experiencedDropThisTick = false;
     }
+
     public void notifyDrop(){
         this.experiencedDropThisTick = true;
     }
@@ -45,9 +48,9 @@ public class Host {
                     tcpState = "CONGESTION_AVOIDANCE";
                 }
             }
-            else if(tcpState.equals("CONGESTION_AVOIDANCE")){
-                // Additive increase. slower growth
-                cwnd += 1;
+            else{
+                tcpState="CONGESTION_AVOIDANCE";
+                cwnd+=1;
             }
         }
     }

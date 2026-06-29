@@ -5,6 +5,7 @@ import simulator.core.EventLoop;
 import simulator.core.Host;
 import simulator.core.Router;
 import simulator.core.packetPool;
+
 public class Main {
     private static int nextHostId = 1;
     private static EventLoop currentLoop;
@@ -14,6 +15,8 @@ public class Main {
         if (currentLoop!=null){
             currentLoop.isRunning=false;
         }
+
+        Host.useSlowStart = true;
 
         packetPool pool = new packetPool(10000);
         Router router = new Router(200, 50);
@@ -62,10 +65,24 @@ public class Main {
             }
         });
 
+        app.post("/togglePause", ctx ->{
+            if(currentLoop != null){
+                currentLoop.isPaused = !currentLoop.isPaused;
+                ctx.result("Paused: " + currentLoop.isPaused);
+                System.out.println("Simulation Paused: " + currentLoop.isPaused);
+            }
+        });
+
         app.post("/reset", ctx ->{
             resetEngine();
             ctx.result("Engine Reset");
             System.out.println("--- The engine has been reset via frontend reload ---");
+        });
+
+        app.post("/toggleSlowStart", ctx -> {
+            Host.useSlowStart = !Host.useSlowStart;
+            ctx.result("Toggled");
+            System.out.println("Slow Start is now: " + (Host.useSlowStart ? "ON":"OFF"));
         });
     }
 }
