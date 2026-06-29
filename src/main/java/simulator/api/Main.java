@@ -32,12 +32,14 @@ public class Main {
     public static void main(String[] args){
         resetEngine();
 
+        int port = System.getenv("PORT") != null? Integer.parseInt(System.getenv("PORT")) : 8080;
+
         Javalin app = Javalin.create(config ->{
             config.bundledPlugins.enableCors( cors ->{
                 cors.addRule(it -> it.anyHost());
             });
             config.staticFiles.add("frontend", io.javalin.http.staticfiles.Location.EXTERNAL);
-        }).start(8080);
+        }).start(port);
 
         System.out.println("\n--- Congestion Sandbox Backend is LIVE ---");
         System.out.println("View live data at: http://localhost:8080/\n");
