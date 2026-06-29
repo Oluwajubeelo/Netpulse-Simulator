@@ -29,6 +29,16 @@
             </div>
         </header>
 
+        <div class="bg-white border border-gray-200 shadow-sm rounded-xl p-6 mb-6">
+            <h2 class="text-lg font-bold text-black mb-4 flex items-center gap-2">
+                <i class="ph ph-broadcast"></i> Live Topology View
+            </h2>
+            <!-- adjust topology view height -->
+            <div class="relative w-full h-[400px]">  
+                <canvas id="networkCanvas" class="w-full h-full rounded-lg bg-gray-50 border border-gray-200"></canvas>
+            </div>
+        </div>
+
         <!-- Main Grid -->
          <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
             <!-- Left Column: Controls and router stats -->
@@ -94,6 +104,12 @@
         const API_BASE = 'http://localhost:8080';
         const MAX_DATA_POINTS = 50;
 
+        let latestHosts =[];
+        let animPackets = [];
+        let isRouterFull = false;
+        let currentQPercent = 0;
+        let canvasW =0 , canvasH = 0;
+
         //Wipe the Java server when the website is refreshed
         window.onload = async() => {
             try{
@@ -102,6 +118,18 @@
                 tcpChart.data.labels =[];
                 tcpChart.data.datasets=[];
                 tcpChart.update();
+
+                const canvas = document.getElementById('networkCanvas');
+                const resize = () => {
+                    if(!canvas) return;
+                    canvasW = canvas.parentElement.clientWidth;
+                    canvasH = canvas.parentElement.clientHeight;
+                    canvas.width = canvasW;
+                    canvas.height = canvasH;
+                };
+                window.addEventListener('resize', resize);
+                resize();
+                drawNetwork();
             }
             catch(e){
                 console.error("Failed to reset backend",e)
@@ -218,6 +246,25 @@
                 activeHostsList.innerHTML = `<div id="waiting-msg" class="text-sm text-gray-400 text-center italic py-4"> No active hosts</div>`;
             }
 
+            latestHosts = data.hosts;
+            isRouterFull = (qPercent >= 74);
+            currentQPercent = qPercent;
+
+            data.hosts.forEach((host,index) => {
+                let visualDots = Math.max(1, Math.floor(host.cwnd / 5));
+                for(let i = 0; i < visualDots; i++){
+                    animPackets.push({
+                        hostId: host.hostId,
+                        hostIndex: index,
+                        totalHosts: data.hosts.length,
+                        progress: -(Math.random() * 0.8),
+                        color: colors[host.hostId %colors.length],
+                        bouncing: false,
+                        x: 0, y:0, vx: 0, vy:0
+                    });
+                }
+            });
+
             updateChart(data);
         }
         function updateChart(data) {
@@ -276,10 +323,100 @@
             catch (e) { console.error("Failed to remove host", e);}
         }
 
+        function drawNetwork(){
+            const canvas = document.getElementById('networkCanvas');
+            if(!canvas || !canvas.getContext) return requestAnimationFrame(drawNetwork);
+            const ctx = canvas.getContext('2d');
+
+            ctx.clearRect(0,0,canvasW,canvasH);
+
+            const routerX = canvasW - 50;
+            const routerY = canvasH /2;
+
+            latestHosts.forEach((host, index) => {
+                const hostX = 40;
+                const spacing = latestHosts.length > 1 ? (canvasH - 80) / (latestHosts.length - 1) : 0;
+                const hostY = latestHosts.length === 1 ?canvasH / 2 : 40 + (index * spacing);
+
+                ctx.beginPath();
+                ctx.moveTo(hostX, hostY);
+                ctx.lineTo(routerX, routerY);
+                ctx.strokeStyle = '#d1d5db'
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.fillStyle = colors[host.hostId % colors.length];
+                ctx.fillRect(hostX - 25, hostY - 15,50,30);
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 12px sans-serif';
+                ctx.fillText(`H${host.hostId}`, hostX -9, hostY +4);
+            });
+
+            ctx.fillStyle = '#111827';
+            ctx.beginPath();
+            ctx.arc(routerX, routerY, 35, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 14px sans-serif';
+            ctx.fillText("R1", routerX - 10, routerY + 5);
+
+            const barW = 60, barH = 6;
+            ctx.fillStyle = '#e5e7eb';
+            ctx.fillRect(routerX - barW/2, routerY + 45, barW, barH);
+            ctx.fillStyle = currentQPercent > 80 ? '#000000' : (currentQPercent > 50 ? '#4b5563' : '#9ca3af');
+            ctx.fillRect(routerX - barW/2, routerY + 45, barW * (currentQPercent/100), barH);
+
+            for(let i=animPackets.length -1; i>=0; i--){
+                let p = animPackets[i];
+                const  hostX = 40;
+                const spacing = p.totalHosts > 1 ? (canvasH - 80) / (p.totalHosts - 1) : 0;
+                const hostY = p.totalHosts === 1 ? canvasH / 2 : 40 + (p.hostIndex * spacing);
+                
+                if(p.bouncing){
+                    p.x +=p.vx;
+                    p.y +=p.vy;
+                    p.vy += 0.4; //gravity pulling the packet down
+
+                    ctx.fillStyle = '#ef4444'; //turn packer red when dropped
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+                    ctx.fill();
+                    //remove packet when it falls off screen via the bottom
+                    if(p.y >canvasH) animPackets.splice(i, 1);
+                }
+                else{
+                    p.progress += 0.005;
+                    if(p.progress >0){
+                        p.x = hostX + (routerX-hostX) * p.progress;
+                        p.y = hostY + (routerY-hostY) * p.progress;
+
+                        ctx.fillStyle = p.color;
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+
+                    if(p.progress >= 0.90){
+                        if(isRouterFull){
+                            p.bouncing = true;
+                            p.vx = -1 -Math.random() * 2;
+                            p.vy = -3 -Math.random() * 3;
+                        }
+                        else{
+                            animPackets.splice(i,1);
+                        }
+                    }
+                }
+            }
+            requestAnimationFrame(drawNetwork);
+        }
+
         setInterval(fetchState,200);
      </script>
 
      <style>
+        .custom-scrollbar::-webkit-scrollbar {width: 6px;}
+        .custom-scrollbar::-webkit-scrollbar-track {background: #f3f4f6; border-radius: 4px;}
         .custom-scrollbar::-webkit-scrollbar-thumb {background: #d1d5db; border-radius: 4px;}
         .custom-scrollbar::-webkit-scrollbar-thumb:hover{background: #9ca3af;}
      </style>
