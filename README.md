@@ -8,13 +8,13 @@ FEATURES
 -Zero-Allocation Memory: Uses an Object Pool of 10,000 pre-allocated packets to simulate traffic without trigerring Java Garbage Collection pauses.
 -Live Topology Physics: An HTML5 <canvas> animation that visualizes actual packet density, travel times, and collision physics when packets are dropped at the router wall.
 -Real-time Telemetry: A decoupled Javascript frontend that polls the Java engine and plots live transmission rates(cwnd) on a dynamic Chart.js graph
--Interactive Sandbox Controls: *Spawn and kill hosts dynamically.
+-Interactive Sandbox Controls: Spawn and kill hosts dynamically.
     -Toggle Slow Start on/off to see the mathematical difference between exponential and additive growth
     -Time Controls: Pause and resume the simulation at any millisecond to analyze packet drops and TCP states.
--Cloud Ready: Fully containerized with a Dockerfile and dynamic port mapping for easy deployment on platforms like Render(which is what I'm using to host)
+-Cloud Ready: Fully containerized with a Dockerfile and dynamic port mapping for easy deployment
 
 LIVE DEMO
-https://netpulse-simulator.onrender.com
+http://16.192.32.95:8080/
 
 LOCAL SETUP INSTRUCTIONS
 This project is bundled as a single full-stack application. You only need to run the backend engine, and it willl automatically serve the frontend web dashboard.
